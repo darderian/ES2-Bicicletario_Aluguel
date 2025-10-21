@@ -1,6 +1,6 @@
 package bicicletario.aluguel;
 
-import bicicletario.aluguel.controller.AluguelController;
+import bicicletario.aluguel.controller.CiclistaController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -8,10 +8,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest // Carrega a aplicação Spring para o teste
-class AluguelControllerTest {
+class CiclistaControllerTest {
 
 @Autowired
-private AluguelController controller;
+private CiclistaController controller;
 
 // Este é o teste automatizado
 // Ele verifica se o Spring consegue carregar o Controller sem erros.
