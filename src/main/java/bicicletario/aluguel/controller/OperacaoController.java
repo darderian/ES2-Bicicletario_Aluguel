@@ -10,7 +10,7 @@ public class OperacaoController {
 // TODO: Implementar POST /aluguel aqui
 @GetMapping("/") // Mapeia para a rota raiz (ex: ...onrender.com/)
 public String getRootStatus() {
-    return "Microsserviço de Aluguel [v1.0.2] está online e operacional.";
+    return "O Microsserviço de Aluguel está online e operacional.";
 }
 // TODO: Implementar POST /devolucao aqui
 
