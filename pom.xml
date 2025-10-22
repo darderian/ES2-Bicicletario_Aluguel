@@ -27,10 +27,7 @@
 
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
 
-        <sonar.cpd.exclusions>
-            **/dto/*.java,
-            **/model/*.java
-        </sonar.cpd.exclusions>
+        <sonar.cpd.exclusions>src/main/java/bicicletario/aluguel/dto/*.java,src/main/java/bicicletario/aluguel/model/*.java</sonar.cpd.exclusions>
     </properties>
 
     <dependencies>
