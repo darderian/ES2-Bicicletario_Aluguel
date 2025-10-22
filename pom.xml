@@ -26,8 +26,6 @@
         <sonar.projectKey>darderian_ES2-Bicicletario_Aluguel</sonar.projectKey>
 
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-
-        <sonar.cpd.exclusions>src/main/java/bicicletario/aluguel/dto/*.java,src/main/java/bicicletario/aluguel/model/*.java</sonar.cpd.exclusions>
     </properties>
 
     <dependencies>
