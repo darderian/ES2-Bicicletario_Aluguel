@@ -123,7 +123,7 @@ void testRecuperarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {
     Integer idSalvo = ciclistaSalvo.getId();
 
     // --- 2. Agir (Act) ---
-    // Simula a requisição GET para /ciclista/{id}
+    // Simula a requisição GET 
     mockMvc.perform(get("/ciclista/" + idSalvo))
 
             // --- 3. Afirmar (Assert) ---
