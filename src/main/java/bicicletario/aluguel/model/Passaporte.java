@@ -9,8 +9,9 @@ private String passaporteNumero;
 private String passaporteValidade;
 private String passaportePais;
 
-// Construtor vazio
-public Passaporte() {}
+public Passaporte() {
+    // Construtor vazio (obrigatório pelo JPA)
+}
 
 // Getters e Setters
 public String getPassaporteNumero() { return passaporteNumero; }

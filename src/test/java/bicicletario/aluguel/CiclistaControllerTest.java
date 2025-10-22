@@ -109,7 +109,7 @@ void testCadastrarCiclista_ComDadosValidos_DeveRetornar201Created() throws Excep
     assertTrue(cartaoRepository.count() > 0);
 }
 
-// --- TESTES PARA GET /ciclista/{idCiclista} ---
+// TESTES PARA GET
 
 @Test
 void testRecuperarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {

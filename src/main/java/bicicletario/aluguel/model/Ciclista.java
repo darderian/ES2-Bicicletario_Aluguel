@@ -25,8 +25,9 @@ public class Ciclista
     private String senha;
     private String status; // 'ATIVO', 'INATIVO', 'AGUARDANDO_CONFIRMACAO'
 
-    // Construtor vazio (obrigatório pelo JPA)
-    public Ciclista() {}
+    public Ciclista() {
+        // Construtor vazio (obrigatório pelo JPA)
+    }
 
     // Getters e Setters
     public void setId(Integer id) {this.id = id;}

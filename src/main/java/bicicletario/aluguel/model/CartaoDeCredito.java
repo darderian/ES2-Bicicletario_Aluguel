@@ -22,8 +22,9 @@ private String numero; // Salve apenas os 4 últimos dígitos em produção!
 private String validade;
 private String cvv; // Não salve o CVV em produção!
 
-// Construtor vazio
-public CartaoDeCredito() {}
+public CartaoDeCredito() {
+    // Construtor vazio (obrigatório pelo JPA)
+}
 
 // Getters e Setters
 public Integer getId() {return id;}

@@ -25,7 +25,7 @@ private CiclistaRepository ciclistaRepository;
 @Autowired
 private CartaoDeCreditoRepository cartaoRepository;
 
-// Endpoint POST /ciclista (COMPLETO)
+// Endpoint POST
 @PostMapping("/ciclista")
 public ResponseEntity<Ciclista> cadastrarCiclista(@Valid @RequestBody CadastroCiclistaDTO cadastroDTO) {
 
@@ -46,7 +46,7 @@ public ResponseEntity<Ciclista> cadastrarCiclista(@Valid @RequestBody CadastroCi
     return ResponseEntity.status(HttpStatus.CREATED).body(ciclistaSalvo);
 }
 
-// Implementa: GET /ciclista/{idCiclista}
+// Implementa: GET
 @GetMapping("/ciclista/{idCiclista}")
 public ResponseEntity<Ciclista> recuperarCiclista(@PathVariable Integer idCiclista) {
 
