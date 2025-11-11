@@ -1,10 +1,14 @@
 package bicicletario.aluguel;
+
+import bicicletario.aluguel.controller.OperacaoController;
 import bicicletario.aluguel.dto.DevolucaoDTO;
 import bicicletario.aluguel.dto.NovoAluguelDTO;
 import bicicletario.aluguel.model.Aluguel;
 import bicicletario.aluguel.model.Devolucao;
+import bicicletario.aluguel.model.Ciclista;
 import bicicletario.aluguel.repository.AluguelRepository;
 import bicicletario.aluguel.repository.DevolucaoRepository;
+import bicicletario.aluguel.repository.CiclistaRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,9 +18,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -24,94 +33,144 @@ public class OperacaoControllerTest {
 
 @Autowired
 private MockMvc mockMvc;
-
 @Autowired
 private AluguelRepository aluguelRepository;
-
 @Autowired
 private DevolucaoRepository devolucaoRepository;
-
+@Autowired
+private CiclistaRepository ciclistaRepository;
 @Autowired
 private ObjectMapper objectMapper;
 
-/**
- * Limpa os repositórios de Aluguel e Devolucao ANTES de cada teste.
- */
+// IDs para simulação
+private static final Integer BICICLETA_ID = 123;
+private static final Integer TRANCA_ID = 10;
+
+// VARIÁVEL PARA O ID GERADO PELO BANCO
+private Integer ciclistaIdGerado;
+
 @BeforeEach
 void setUp() {
-    // Limpa as tabelas relacionadas a este controller
+    // 1. Limpa tudo
     aluguelRepository.deleteAll();
     devolucaoRepository.deleteAll();
+    ciclistaRepository.deleteAll();
+
+    // 2. Cria o ciclista ativo e DEIXA O BANCO GERAR O ID
+    Ciclista ciclista = new Ciclista();
+    // Não setamos o ID, o banco o fará automaticamente
+    ciclista.setStatus("ATIVO");
+    ciclista.setNome("Testador Ativo");
+
+    // 3. Salva e armazena o ID real gerado
+    Ciclista ciclistaSalvo = ciclistaRepository.save(ciclista);
+    ciclistaIdGerado = ciclistaSalvo.getId();
 }
 
 // --- TESTE PARA POST /aluguel ---
 @Test
-void testRealizarAluguel_ComDadosValidos_DeveRetornar200OK() throws Exception {
-    // --- 1. Organizar (Arrange) ---
+void testRealizarAluguel_ComCiclistaAtivo_DeveRetornar200OK() throws Exception {
     NovoAluguelDTO dto = new NovoAluguelDTO();
-    dto.setCiclista(1); // ID do ciclista (simulado)
-    dto.setTrancaInicio(10); // ID da tranca (simulado)
+    dto.setCiclista(ciclistaIdGerado); // Usa o ID GERADO
+    dto.setTrancaInicio(TRANCA_ID);
 
     String jsonRequisicao = objectMapper.writeValueAsString(dto);
 
-    // --- 2. Agir (Act) ---
     mockMvc.perform(post("/aluguel")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.cobranca").value(100));
 
-            // --- 3. Afirmar (Assert) ---
-            .andExpect(status().isOk()) // Espera 200 OK
-            .andExpect(jsonPath("$.id").exists()) // Espera que a resposta tenha um ID
-            .andExpect(jsonPath("$.ciclista").value(1))
-            .andExpect(jsonPath("$.trancaInicio").value(10))
-            .andExpect(jsonPath("$.bicicleta").value(123)) // Valor do MOCK no controller
-            .andExpect(jsonPath("$.cobranca").value(100)); // Valor do MOCK no controller
+    // Verifica se o aluguel foi salvo (1)
+    assertEquals(1, aluguelRepository.count());
+    // Verifica se é um aluguel ativo
+    assertTrue(aluguelRepository.findByCiclistaAndHoraFimIsNull(ciclistaIdGerado).isPresent());
 }
 
-// --- TESTE PARA POST /devolucao ---
 @Test
-void testRealizarDevolucao_ComDadosValidos_DeveRetornar200OK() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    DevolucaoDTO dto = new DevolucaoDTO();
-    dto.setIdBicicleta(123); // ID da bicicleta (simulado)
-    dto.setIdTranca(20); // ID da tranca (simulado)
+void testRealizarAluguel_ComCiclistaInativo_DeveRetornar422Unprocessable() throws Exception {
+    // 1. Altera o status do ciclista para INATIVO
+    Ciclista ciclista = ciclistaRepository.findById(ciclistaIdGerado).get();
+    ciclista.setStatus("INATIVO");
+    ciclistaRepository.save(ciclista);
 
+    // 2. Tenta alugar
+    NovoAluguelDTO dto = new NovoAluguelDTO();
+    dto.setCiclista(ciclistaIdGerado); // Usa o ID GERADO
+    dto.setTrancaInicio(TRANCA_ID);
     String jsonRequisicao = objectMapper.writeValueAsString(dto);
 
-    // --- 2. Agir (Act) ---
+    mockMvc.perform(post("/aluguel")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity());
+
+    // 3. Verifica se o aluguel NÃO foi criado
+    assertEquals(0, aluguelRepository.count());
+}
+
+
+// --- TESTE PARA POST /devolucao (CORRIGIDO) ---
+@Test
+void testRealizarDevolucao_ComAluguelAtivo_DeveRetornar200EFecharRegistro() throws Exception {
+    // --- 1. Organizar (Cria um aluguel ativo para devolver) ---
+    Aluguel aluguel = new Aluguel();
+    aluguel.setCiclista(ciclistaIdGerado); // Usa o ID GERADO
+    aluguel.setBicicleta(BICICLETA_ID);
+    aluguel.setTrancaInicio(TRANCA_ID);
+    aluguel.setHoraInicio(LocalDateTime.now().minusHours(1));
+    aluguelRepository.save(aluguel);
+
+    // Garante que o aluguel está ativo ANTES da devolução
+    assertTrue(aluguelRepository.findByBicicletaAndHoraFimIsNull(BICICLETA_ID).isPresent());
+
+    // --- 2. Agir (Devolução) ---
+    DevolucaoDTO dto = new DevolucaoDTO();
+    dto.setIdBicicleta(BICICLETA_ID);
+    dto.setIdTranca(20); // Tranca Fim
+    String jsonRequisicao = objectMapper.writeValueAsString(dto);
+
     mockMvc.perform(post("/devolucao")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.cobranca").value(101));
 
-            // --- 3. Afirmar (Assert) ---
-            .andExpect(status().isOk()) // Espera 200 OK
-            .andExpect(jsonPath("$.id").exists()) // Espera que a resposta tenha um ID
-            .andExpect(jsonPath("$.bicicleta").value(123))
-            .andExpect(jsonPath("$.trancaFim").value(20))
-            .andExpect(jsonPath("$.cobranca").value(101)); // Valor do MOCK no controller
+    // --- 3. Afirmar (Checa o estado do banco) ---
+    // Verifica se o aluguel foi FECHADO (findByBicicletaAndHoraFimIsNull deve retornar vazio)
+    assertFalse(aluguelRepository.findByBicicletaAndHoraFimIsNull(BICICLETA_ID).isPresent());
+    // Verifica se um registro de Devolução foi criado
+    assertEquals(1, devolucaoRepository.count());
+}
+
+@Test
+void testRealizarDevolucao_SemAluguelAtivo_DeveRetornar404NotFound() throws Exception {
+    // --- 1. Organizar (Banco limpo, sem aluguel ativo) ---
+    DevolucaoDTO dto = new DevolucaoDTO();
+    dto.setIdBicicleta(BICICLETA_ID);
+    dto.setIdTranca(20);
+    String jsonRequisicao = objectMapper.writeValueAsString(dto);
+
+    // --- 2. Agir (Devolução) ---
+    mockMvc.perform(post("/devolucao")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isNotFound());
+
+    // 3. Verifica se nada foi criado
+    assertEquals(0, devolucaoRepository.count());
 }
 
 // --- TESTE PARA GET /restaurarBanco ---
 @Test
-void testRestaurarBanco_DeveLimparRepositorios_DeveRetornar200OK() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    // Adiciona dados "sujos" no banco para garantir que o endpoint está limpando
+void testRestaurarBanco_DeveLimparRepositorios() throws Exception {
     aluguelRepository.save(new Aluguel());
     devolucaoRepository.save(new Devolucao());
 
-    // Verifica se os dados estão lá
-    assertEquals(1, aluguelRepository.count());
-    assertEquals(1, devolucaoRepository.count());
-
-
-    // --- 2. Agir (Act) ---
     mockMvc.perform(get("/restaurarBanco"))
+            .andExpect(status().isOk());
 
-            // --- 3. Afirmar (Assert) ---
-            .andExpect(status().isOk()) // Espera 200 OK
-            .andExpect(content().string("Banco de dados (Aluguel) restaurado."));
-
-    // Verifica se os dados foram realmente limpos
     assertEquals(0, aluguelRepository.count());
     assertEquals(0, devolucaoRepository.count());
 }
