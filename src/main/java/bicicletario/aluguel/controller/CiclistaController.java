@@ -1,12 +1,14 @@
 package bicicletario.aluguel.controller;
-
+import bicicletario.aluguel.dto.BicicletaDTO;
 import bicicletario.aluguel.dto.CadastroCiclistaDTO;
 import bicicletario.aluguel.dto.NovoCartaoDeCreditoDTO;
 import bicicletario.aluguel.dto.NovoCiclistaDTO;
 import bicicletario.aluguel.dto.PassaporteDTO;
+import bicicletario.aluguel.model.Aluguel;
 import bicicletario.aluguel.model.CartaoDeCredito;
 import bicicletario.aluguel.model.Ciclista;
 import bicicletario.aluguel.model.Passaporte;
+import bicicletario.aluguel.repository.AluguelRepository;
 import bicicletario.aluguel.repository.CartaoDeCreditoRepository;
 import bicicletario.aluguel.repository.CiclistaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 public class CiclistaController {
@@ -25,47 +27,151 @@ private CiclistaRepository ciclistaRepository;
 @Autowired
 private CartaoDeCreditoRepository cartaoRepository;
 
-// Endpoint POST
+@Autowired
+private AluguelRepository aluguelRepository; // Necessário para /permiteAluguel
+
+// Endpoint: POST /ciclista
 @PostMapping("/ciclista")
 public ResponseEntity<Ciclista> cadastrarCiclista(@Valid @RequestBody CadastroCiclistaDTO cadastroDTO) {
-
-    // 1. Converter DTOs para Entidades
     Ciclista ciclista = converterCiclistaDtoParaEntidade(cadastroDTO.getCiclista());
-
-    // 2. Salvar o Ciclista PRIMEIRO para obter o ID
     Ciclista ciclistaSalvo = ciclistaRepository.save(ciclista);
-
-    // 3. Converter e associar o Cartão de Crédito
     CartaoDeCredito cartao = converterCartaoDtoParaEntidade(
             cadastroDTO.getMeioDePagamento(),
-            ciclistaSalvo.getId() // Associa o cartão ao ID do ciclista
+            ciclistaSalvo.getId()
     );
     cartaoRepository.save(cartao);
-
-    // 4. Retornar 201 Created com o Ciclista salvo
     return ResponseEntity.status(HttpStatus.CREATED).body(ciclistaSalvo);
 }
 
-// Implementa: GET
+// Endpoint: GET /ciclista/{idCiclista}
 @GetMapping("/ciclista/{idCiclista}")
 public ResponseEntity<Ciclista> recuperarCiclista(@PathVariable Integer idCiclista) {
-
-    // 1. Usa o repositório para buscar o ciclista pelo ID
-    //    O .findById() retorna um "Optional", que é um container
-    //    que pode ou não ter um ciclista dentro.
     Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
-
-    // 2. Verifica se o ciclista foi encontrado
     if (ciclistaOptional.isPresent()) {
-        // 3. Se sim, retorna 200 OK com o ciclista no corpo
         return ResponseEntity.ok(ciclistaOptional.get());
     } else {
-        // 4. Se não, retorna 404 Not Found (Não Encontrado)
         return ResponseEntity.notFound().build();
     }
 }
 
+// Endpoint: PUT /ciclista/{idCiclista}
+@PutMapping("/ciclista/{idCiclista}")
+public ResponseEntity<Ciclista> editarCiclista(
+        @PathVariable Integer idCiclista,
+        @Valid @RequestBody NovoCiclistaDTO dto) {
+
+    Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
+    if (!ciclistaOptional.isPresent()) {
+        return ResponseEntity.notFound().build();
+    }
+    Ciclista ciclistaExistente = ciclistaOptional.get();
+    atualizarEntidadeComDTO(ciclistaExistente, dto);
+    Ciclista ciclistaAtualizado = ciclistaRepository.save(ciclistaExistente);
+    return ResponseEntity.ok(ciclistaAtualizado);
+}
+
+// Endpoint: POST /ciclista/{idCiclista}/ativar
+@PostMapping("/ciclista/{idCiclista}/ativar")
+public ResponseEntity<Ciclista> ativarCiclista(@PathVariable Integer idCiclista) {
+    Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
+    if (!ciclistaOptional.isPresent()) {
+        return ResponseEntity.notFound().build();
+    }
+    Ciclista ciclistaExistente = ciclistaOptional.get();
+    ciclistaExistente.setStatus("ATIVO");
+    Ciclista ciclistaAtivado = ciclistaRepository.save(ciclistaExistente);
+    return ResponseEntity.ok(ciclistaAtivado);
+}
+
+// Endpoint: GET /ciclista/{idCiclista}/permiteAluguel
+@GetMapping("/ciclista/{idCiclista}/permiteAluguel")
+public ResponseEntity<Boolean> permiteAluguel(@PathVariable Integer idCiclista) {
+    if (!ciclistaRepository.existsById(idCiclista)) {
+        return ResponseEntity.notFound().build();
+    }
+    Optional<Aluguel> aluguelAtivo = aluguelRepository.findByCiclistaAndHoraFimIsNull(idCiclista);
+    boolean podeAlugar = !aluguelAtivo.isPresent();
+    return ResponseEntity.ok(podeAlugar);
+}
+
+// Endpoint: GET /ciclista/{idCiclista}/bicicletaAlugada
+@GetMapping("/ciclista/{idCiclista}/bicicletaAlugada")
+public ResponseEntity<?> getBicicletaAlugada(@PathVariable Integer idCiclista) {
+    if (!ciclistaRepository.existsById(idCiclista)) {
+        return ResponseEntity.notFound().build();
+    }
+    Optional<Aluguel> aluguelAtivo = aluguelRepository.findByCiclistaAndHoraFimIsNull(idCiclista);
+    if (aluguelAtivo.isPresent()) {
+        Integer bicicletaId = aluguelAtivo.get().getBicicleta();
+        // MOCK com DTO (Tarefa 8)
+        BicicletaDTO bicicletaMock = new BicicletaDTO();
+        bicicletaMock.setId(bicicletaId);
+        bicicletaMock.setMarca("Marca Mockada (DTO)");
+        bicicletaMock.setModelo("Modelo Falso (DTO)");
+        bicicletaMock.setAno("2024");
+        bicicletaMock.setStatus("EM_USO");
+        return ResponseEntity.ok(bicicletaMock);
+    } else {
+        return ResponseEntity.ok().build();
+    }
+}
+
+// Endpoint: GET /ciclista/existeEmail/{email}
+@GetMapping("/ciclista/existeEmail/{email}")
+public ResponseEntity<Boolean> existeEmail(@PathVariable String email) {
+    boolean emailEmUso = ciclistaRepository.existsByEmail(email);
+    return ResponseEntity.ok(emailEmUso);
+}
+
+// Endpoint: GET /cartaoDeCredito/{idCiclista} (NOVO)
+@GetMapping("/cartaoDeCredito/{idCiclista}")
+public ResponseEntity<CartaoDeCredito> getCartaoDeCredito(@PathVariable Integer idCiclista) {
+
+    // 1. Usa o novo método do repositório
+    Optional<CartaoDeCredito> cartaoOptional = cartaoRepository.findByIdCiclista(idCiclista);
+
+    if (cartaoOptional.isPresent()) {
+        // 2. Retorna 200 OK com o cartão
+        return ResponseEntity.ok(cartaoOptional.get());
+    } else {
+        // 3. Retorna 404 Not Found (Ciclista não tem cartão ou ciclista não existe)
+        return ResponseEntity.notFound().build();
+    }
+}
+
+// Endpoint: PUT /cartaoDeCredito/{idCiclista} (NOVO)
+@PutMapping("/cartaoDeCredito/{idCiclista}")
+public ResponseEntity<Void> alterarCartaoDeCredito(
+        @PathVariable Integer idCiclista,
+        @Valid @RequestBody NovoCartaoDeCreditoDTO dto) {
+
+    // 1. Busca o cartão existente pelo ID DO CICLISTA
+    Optional<CartaoDeCredito> cartaoOptional = cartaoRepository.findByIdCiclista(idCiclista);
+
+    if (!cartaoOptional.isPresent()) {
+        // Se não existe, retorna 404 Not Found
+        return ResponseEntity.notFound().build();
+    }
+
+    // 2. Pega o cartão existente
+    CartaoDeCredito cartaoExistente = cartaoOptional.get();
+
+    // 3. Atualiza os dados
+    cartaoExistente.setNomeTitular(dto.getNomeTitular());
+    cartaoExistente.setNumero(dto.getNumero());
+    cartaoExistente.setValidade(dto.getValidade());
+    cartaoExistente.setCvv(dto.getCvv());
+
+    // 4. Salva no banco
+    cartaoRepository.save(cartaoExistente);
+
+    // 5. Retorna 200 OK (sem corpo, como no Swagger)
+    return ResponseEntity.ok().build();
+}
+
+
 // --- Métodos Auxiliares (Helpers) ---
+
 private Ciclista converterCiclistaDtoParaEntidade(NovoCiclistaDTO dto) {
     Ciclista ciclista = new Ciclista();
     ciclista.setNome(dto.getNome());
@@ -74,10 +180,9 @@ private Ciclista converterCiclistaDtoParaEntidade(NovoCiclistaDTO dto) {
     ciclista.setNacionalidade(dto.getNacionalidade());
     ciclista.setEmail(dto.getEmail());
     ciclista.setUrlFotoDocumento(dto.getUrlFotoDocumento());
-    ciclista.setSenha(dto.getSenha()); // Lembrete: Hashear a senha em produção!
-    ciclista.setStatus("AGUARDANDO_CONFIRMACAO"); // Status inicial
+    ciclista.setSenha(dto.getSenha());
+    ciclista.setStatus("AGUARDANDO_CONFIRMACAO");
 
-    // Converte o DTO do passaporte em Entidade Embutida
     if (dto.getPassaporte() != null) {
         PassaporteDTO passDto = dto.getPassaporte();
         Passaporte passaporte = new Passaporte();
@@ -86,18 +191,36 @@ private Ciclista converterCiclistaDtoParaEntidade(NovoCiclistaDTO dto) {
         passaporte.setPassaportePais(passDto.getPais());
         ciclista.setPassaporte(passaporte);
     }
-
     return ciclista;
 }
 
 private CartaoDeCredito converterCartaoDtoParaEntidade(NovoCartaoDeCreditoDTO dto, Integer ciclistaId) {
     CartaoDeCredito cartao = new CartaoDeCredito();
-    cartao.setIdCiclista(ciclistaId); // Chave estrangeira
+    cartao.setIdCiclista(ciclistaId);
     cartao.setNomeTitular(dto.getNomeTitular());
-    cartao.setNumero(dto.getNumero()); // Lembrete: Não salve o número todo!
+    cartao.setNumero(dto.getNumero());
     cartao.setValidade(dto.getValidade());
-    cartao.setCvv(dto.getCvv()); // Lembrete: Não salve o CVV!
-
+    cartao.setCvv(dto.getCvv());
     return cartao;
+}
+
+private void atualizarEntidadeComDTO(Ciclista entidade, NovoCiclistaDTO dto) {
+    entidade.setNome(dto.getNome());
+    entidade.setNascimento(dto.getNascimento());
+    entidade.setCpf(dto.getCpf());
+    entidade.setNacionalidade(dto.getNacionalidade());
+    entidade.setEmail(dto.getEmail());
+    entidade.setUrlFotoDocumento(dto.getUrlFotoDocumento());
+
+    if (dto.getPassaporte() != null) {
+        PassaporteDTO passDto = dto.getPassaporte();
+        Passaporte passaporte = new Passaporte();
+        passaporte.setPassaporteNumero(passDto.getNumero());
+        passaporte.setPassaporteValidade(passDto.getValidade());
+        passaporte.setPassaportePais(passDto.getPais());
+        entidade.setPassaporte(passaporte);
+    } else {
+        entidade.setPassaporte(null);
+    }
 }
 }
