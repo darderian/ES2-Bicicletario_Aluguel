@@ -19,8 +19,10 @@ public class FuncionarioController {
 @Autowired
 private FuncionarioRepository repository;
 
-// Endpoint: POST /funcionario
-// Objetivo: Cadastrar um novo funcionário
+/**
+ * Caso de Uso: UC15 - Manter Cadastro de Funcionário (Fluxo Principal, Passo 3-8)
+ * [POST /funcionario]
+ */
 @PostMapping("/funcionario")
 public ResponseEntity<Funcionario> cadastrarFuncionario(@Valid @RequestBody NovoFuncionarioDTO dto) {
 
@@ -41,8 +43,10 @@ public ResponseEntity<Funcionario> cadastrarFuncionario(@Valid @RequestBody Novo
     return ResponseEntity.status(HttpStatus.CREATED).body(funcionarioSalvo);
 }
 
-// Endpoint: GET /funcionario
-// Objetivo: Recuperar a lista de todos os funcionários
+/**
+ * Caso de Uso: UC15 - Manter Cadastro de Funcionário (Fluxo Principal, Passo 1)
+ * [GET /funcionario]
+ */
 @GetMapping("/funcionario")
 public ResponseEntity<List<Funcionario>> recuperarFuncionarios() {
 
@@ -53,8 +57,10 @@ public ResponseEntity<List<Funcionario>> recuperarFuncionarios() {
     return ResponseEntity.ok(funcionarios);
 }
 
-// Endpoint: GET /funcionario/{idFuncionario}
-// Objetivo: Recuperar um funcionário específico pelo ID
+/**
+ * Caso de Uso: UC15 - Manter Cadastro de Funcionário (Consulta)
+ * [GET /funcionario/{idFuncionario}]
+ */
 @GetMapping("/funcionario/{idFuncionario}")
 public ResponseEntity<Funcionario> recuperarFuncionario(@PathVariable Integer idFuncionario) {
 
@@ -70,8 +76,10 @@ public ResponseEntity<Funcionario> recuperarFuncionario(@PathVariable Integer id
     }
 }
 
-// Endpoint: PUT /funcionario/{idFuncionario}
-// Objetivo: Atualizar os dados de um funcionário
+/**
+ * Caso de Uso: UC15 - Manter Cadastro de Funcionário (Fluxo Alternativo A1)
+ * [PUT /funcionario/{idFuncionario}]
+ */
 @PutMapping("/funcionario/{idFuncionario}")
 public ResponseEntity<Funcionario> editarFuncionario(
         @PathVariable Integer idFuncionario,
@@ -79,7 +87,6 @@ public ResponseEntity<Funcionario> editarFuncionario(
 
     // 1. Verifica se o funcionário que queremos editar existe
     Optional<Funcionario> funcionarioOptional = repository.findById(idFuncionario);
-    //tive que mudar de is.empty para isPresent por estar usando java 8
     if (!funcionarioOptional.isPresent()) {
         // Se não existe, retorna 404 Not Found
         return ResponseEntity.notFound().build();
@@ -103,8 +110,10 @@ public ResponseEntity<Funcionario> editarFuncionario(
     return ResponseEntity.ok(funcionarioAtualizado);
 }
 
-// Endpoint: DELETE /funcionario/{idFuncionario}
-// Objetivo: Remover um funcionário
+/**
+ * Caso de Uso: UC15 - Manter Cadastro de Funcionário (Fluxo Alternativo A2)
+ * [DELETE /funcionario/{idFuncionario}]
+ */
 @DeleteMapping("/funcionario/{idFuncionario}")
 public ResponseEntity<Void> removerFuncionario(@PathVariable Integer idFuncionario) {
 

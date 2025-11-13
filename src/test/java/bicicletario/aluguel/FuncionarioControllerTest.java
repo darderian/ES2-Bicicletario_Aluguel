@@ -36,7 +36,12 @@ void setUp() {
     repository.deleteAll();
 }
 
-// --- TESTE PARA POST /funcionario ---
+// --- TESTE PARA POST /funcionario (UC15 - Incluir) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC15 (Fluxo Principal, Passo 3-8).
+ * POST /funcionario com dados válidos.
+ */
 @Test
 void testCadastrarFuncionario_ComDadosValidos_DeveRetornar201Created() throws Exception {
     // --- 1. Organizar (Arrange) ---
@@ -55,11 +60,56 @@ void testCadastrarFuncionario_ComDadosValidos_DeveRetornar201Created() throws Ex
             .andExpect(jsonPath("$.email").value("func@teste.com"));
 }
 
-// --- TESTE PARA GET /funcionario (Todos) ---
+/**
+ * NOVO TESTE: Testa a falha 422 (Validação de Negócio) do UC15.
+ * Senha e confirmação de senha não batem.
+ */
+@Test
+void testCadastrarFuncionario_ComSenhasDiferentes_DeveRetornar422() throws Exception {
+    // --- 1. Organizar (Arrange) ---
+    NovoFuncionarioDTO dto = criarNovoFuncionarioDTOValido();
+    dto.setConfirmacaoSenha("senhaErrada"); // Senhas diferentes
+    String jsonRequisicao = objectMapper.writeValueAsString(dto);
+
+    // --- 2. Agir (Act) ---
+    mockMvc.perform(post("/funcionario")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+
+            // --- 3. Afirmar (Assert) ---
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+/**
+ * NOVO TESTE: Testa a falha 422 (Validação @Valid) do UC15.
+ * DTO com dados inválidos (ex: email em branco).
+ */
+@Test
+void testCadastrarFuncionario_ComDadosInvalidos_DeveRetornar422() throws Exception {
+    // --- 1. Organizar (Arrange) ---
+    NovoFuncionarioDTO dto = criarNovoFuncionarioDTOValido();
+    dto.setEmail(""); // Inválido (@NotBlank)
+    String jsonRequisicao = objectMapper.writeValueAsString(dto);
+
+    // --- 2. Agir (Act) ---
+    mockMvc.perform(post("/funcionario")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+
+            // --- 3. Afirmar (Assert) ---
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+
+// --- TESTE PARA GET /funcionario (UC15 - Listar) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC15 (Fluxo Principal, Passo 1).
+ * GET /funcionario.
+ */
 @Test
 void testRecuperarFuncionarios_DeveRetornar200OK() throws Exception {
     // --- 1. Organizar (Arrange) ---
-    // Salva um funcionário no banco para a lista não vir vazia
     repository.save(converterDtoParaEntidade(criarNovoFuncionarioDTOValido()));
 
     // --- 2. Agir (Act) ---
@@ -72,6 +122,11 @@ void testRecuperarFuncionarios_DeveRetornar200OK() throws Exception {
 }
 
 // --- TESTES PARA GET /funcionario/{id} ---
+
+/**
+ * Testa a consulta de um funcionário (UC15).
+ * GET /funcionario/{id}
+ */
 @Test
 void testRecuperarFuncionario_ComIdExistente_DeveRetornar200OK() throws Exception {
     // --- 1. Organizar (Arrange) ---
@@ -87,6 +142,9 @@ void testRecuperarFuncionario_ComIdExistente_DeveRetornar200OK() throws Exceptio
             .andExpect(jsonPath("$.nome").value("Funcionario Teste"));
 }
 
+/**
+ * Testa a consulta de um funcionário (Falha 404).
+ */
 @Test
 void testRecuperarFuncionario_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     // --- 2. Agir (Act) ---
@@ -95,17 +153,20 @@ void testRecuperarFuncionario_ComIdInexistente_DeveRetornar404NotFound() throws 
             .andExpect(status().isNotFound()); // Espera 404
 }
 
-// --- TESTES PARA PUT /funcionario/{id} ---
+// --- TESTES PARA PUT /funcionario/{id} (UC15 - Editar) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC15 (Fluxo Alternativo A1 - Editar).
+ * PUT /funcionario/{id}
+ */
 @Test
 void testEditarFuncionario_ComIdExistente_DeveRetornar200OK() throws Exception {
     // --- 1. Organizar (Arrange) ---
     Funcionario salvo = repository.save(converterDtoParaEntidade(criarNovoFuncionarioDTOValido()));
     Integer idSalvo = salvo.getId();
 
-    // Cria um DTO com dados atualizados
     NovoFuncionarioDTO dtoAtualizado = criarNovoFuncionarioDTOValido();
     dtoAtualizado.setNome("Funcionario Nome Atualizado");
-
     String jsonRequisicao = objectMapper.writeValueAsString(dtoAtualizado);
 
     // --- 2. Agir (Act) ---
@@ -119,6 +180,9 @@ void testEditarFuncionario_ComIdExistente_DeveRetornar200OK() throws Exception {
             .andExpect(jsonPath("$.nome").value("Funcionario Nome Atualizado"));
 }
 
+/**
+ * Testa a falha 404 do UC15 (Editar).
+ */
 @Test
 void testEditarFuncionario_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     // --- 1. Organizar (Arrange) ---
@@ -132,7 +196,12 @@ void testEditarFuncionario_ComIdInexistente_DeveRetornar404NotFound() throws Exc
             .andExpect(status().isNotFound()); // Espera 404
 }
 
-// --- TESTES PARA DELETE /funcionario/{id} ---
+// --- TESTES PARA DELETE /funcionario/{id} (UC15 - Excluir) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC15 (Fluxo Alternativo A2 - Excluir).
+ * DELETE /funcionario/{id}
+ */
 @Test
 void testRemoverFuncionario_ComIdExistente_DeveRetornar200OK() throws Exception {
     // --- 1. Organizar (Arrange) ---
@@ -145,6 +214,9 @@ void testRemoverFuncionario_ComIdExistente_DeveRetornar200OK() throws Exception 
             .andExpect(status().isOk()); // Espera 200
 }
 
+/**
+ * Testa a falha 404 do UC15 (Excluir).
+ */
 @Test
 void testRemoverFuncionario_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     // --- 2. Agir (Act) ---

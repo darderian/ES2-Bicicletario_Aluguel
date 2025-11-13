@@ -1,4 +1,5 @@
 package bicicletario.aluguel.controller;
+
 import bicicletario.aluguel.dto.BicicletaDTO;
 import bicicletario.aluguel.dto.CadastroCiclistaDTO;
 import bicicletario.aluguel.dto.NovoCartaoDeCreditoDTO;
@@ -11,6 +12,8 @@ import bicicletario.aluguel.model.Passaporte;
 import bicicletario.aluguel.repository.AluguelRepository;
 import bicicletario.aluguel.repository.CartaoDeCreditoRepository;
 import bicicletario.aluguel.repository.CiclistaRepository;
+import bicicletario.aluguel.mock.EquipamentoService;
+import bicicletario.aluguel.mock.ExternoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,11 +31,28 @@ private CiclistaRepository ciclistaRepository;
 private CartaoDeCreditoRepository cartaoRepository;
 
 @Autowired
-private AluguelRepository aluguelRepository; // Necessário para /permiteAluguel
+private AluguelRepository aluguelRepository;
 
-// Endpoint: POST /ciclista
+@Autowired
+private EquipamentoService equipamentoService;
+
+@Autowired
+private ExternoService externoService;
+
+/**
+ * Caso de Uso: UC01 - Cadastrar Ciclista
+ * [POST /ciclista]
+ */
 @PostMapping("/ciclista")
 public ResponseEntity<Ciclista> cadastrarCiclista(@Valid @RequestBody CadastroCiclistaDTO cadastroDTO) {
+
+    // Gap UC01-Passo 7: Validar Cartão
+    boolean cartaoValido = externoService.validarCartaoDeCredito(cadastroDTO.getMeioDePagamento());
+    if (!cartaoValido) {
+        // UC01-A3: Cartão reprovado
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build(); // 422
+    }
+
     Ciclista ciclista = converterCiclistaDtoParaEntidade(cadastroDTO.getCiclista());
     Ciclista ciclistaSalvo = ciclistaRepository.save(ciclista);
     CartaoDeCredito cartao = converterCartaoDtoParaEntidade(
@@ -40,10 +60,21 @@ public ResponseEntity<Ciclista> cadastrarCiclista(@Valid @RequestBody CadastroCi
             ciclistaSalvo.getId()
     );
     cartaoRepository.save(cartao);
+
+    // Gap UC01-Passo 9: Enviar Email
+    externoService.enviarEmail(
+            ciclistaSalvo.getEmail(),
+            "Bem-vindo ao VáDeBicicleta!",
+            "Seu cadastro foi recebido. Por favor, ative sua conta."
+    );
+
     return ResponseEntity.status(HttpStatus.CREATED).body(ciclistaSalvo);
 }
 
-// Endpoint: GET /ciclista/{idCiclista}
+/**
+ * Caso de Uso: Suporte (Consulta de dados para outros UCs)
+ * [GET /ciclista/{idCiclista}]
+ */
 @GetMapping("/ciclista/{idCiclista}")
 public ResponseEntity<Ciclista> recuperarCiclista(@PathVariable Integer idCiclista) {
     Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
@@ -54,7 +85,10 @@ public ResponseEntity<Ciclista> recuperarCiclista(@PathVariable Integer idCiclis
     }
 }
 
-// Endpoint: PUT /ciclista/{idCiclista}
+/**
+ * Caso de Uso: UC06 - Alterar Dados do Ciclista
+ * [PUT /ciclista/{idCiclista}]
+ */
 @PutMapping("/ciclista/{idCiclista}")
 public ResponseEntity<Ciclista> editarCiclista(
         @PathVariable Integer idCiclista,
@@ -67,10 +101,21 @@ public ResponseEntity<Ciclista> editarCiclista(
     Ciclista ciclistaExistente = ciclistaOptional.get();
     atualizarEntidadeComDTO(ciclistaExistente, dto);
     Ciclista ciclistaAtualizado = ciclistaRepository.save(ciclistaExistente);
+
+    // Gap UC06-Passo 4: Enviar Email
+    externoService.enviarEmail(
+            ciclistaAtualizado.getEmail(),
+            "Seus dados foram alterados",
+            "Olá, " + ciclistaAtualizado.getNome() + ". Seus dados de ciclista foram atualizados com sucesso."
+    );
+
     return ResponseEntity.ok(ciclistaAtualizado);
 }
 
-// Endpoint: POST /ciclista/{idCiclista}/ativar
+/**
+ * Caso de Uso: UC02 - Confirmar email (Ativação)
+ * [POST /ciclista/{idCiclista}/ativar]
+ */
 @PostMapping("/ciclista/{idCiclista}/ativar")
 public ResponseEntity<Ciclista> ativarCiclista(@PathVariable Integer idCiclista) {
     Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
@@ -83,7 +128,10 @@ public ResponseEntity<Ciclista> ativarCiclista(@PathVariable Integer idCiclista)
     return ResponseEntity.ok(ciclistaAtivado);
 }
 
-// Endpoint: GET /ciclista/{idCiclista}/permiteAluguel
+/**
+ * Caso de Uso: Suporte ao UC03 (Verifica R1 - "só pode pegar uma bicicleta por vez")
+ * [GET /ciclista/{idCiclista}/permiteAluguel]
+ */
 @GetMapping("/ciclista/{idCiclista}/permiteAluguel")
 public ResponseEntity<Boolean> permiteAluguel(@PathVariable Integer idCiclista) {
     if (!ciclistaRepository.existsById(idCiclista)) {
@@ -94,7 +142,10 @@ public ResponseEntity<Boolean> permiteAluguel(@PathVariable Integer idCiclista) 
     return ResponseEntity.ok(podeAlugar);
 }
 
-// Endpoint: GET /ciclista/{idCiclista}/bicicletaAlugada
+/**
+ * Caso de Uso: Suporte (Consulta bicicleta alugada)
+ * [GET /ciclista/{idCiclista}/bicicletaAlugada]
+ */
 @GetMapping("/ciclista/{idCiclista}/bicicletaAlugada")
 public ResponseEntity<?> getBicicletaAlugada(@PathVariable Integer idCiclista) {
     if (!ciclistaRepository.existsById(idCiclista)) {
@@ -103,76 +154,80 @@ public ResponseEntity<?> getBicicletaAlugada(@PathVariable Integer idCiclista) {
     Optional<Aluguel> aluguelAtivo = aluguelRepository.findByCiclistaAndHoraFimIsNull(idCiclista);
     if (aluguelAtivo.isPresent()) {
         Integer bicicletaId = aluguelAtivo.get().getBicicleta();
-        // MOCK com DTO (Tarefa 8)
-        BicicletaDTO bicicletaMock = new BicicletaDTO();
-        bicicletaMock.setId(bicicletaId);
-        bicicletaMock.setMarca("Marca Mockada (DTO)");
-        bicicletaMock.setModelo("Modelo Falso (DTO)");
-        bicicletaMock.setAno("2024");
-        bicicletaMock.setStatus("EM_USO");
+        BicicletaDTO bicicletaMock = equipamentoService.getBicicleta(bicicletaId);
         return ResponseEntity.ok(bicicletaMock);
     } else {
         return ResponseEntity.ok().build();
     }
 }
 
-// Endpoint: GET /ciclista/existeEmail/{email}
+/**
+ * Caso de Uso: Suporte ao UC01 (Verifica R3 - "email deve ser unico")
+ * [GET /ciclista/existeEmail/{email}]
+ */
 @GetMapping("/ciclista/existeEmail/{email}")
 public ResponseEntity<Boolean> existeEmail(@PathVariable String email) {
     boolean emailEmUso = ciclistaRepository.existsByEmail(email);
     return ResponseEntity.ok(emailEmUso);
 }
 
-// Endpoint: GET /cartaoDeCredito/{idCiclista} (NOVO)
+/**
+ * Caso de Uso: Suporte ao UC07 (Consulta cartão)
+ * [GET /cartaoDeCredito/{idCiclista}]
+ */
 @GetMapping("/cartaoDeCredito/{idCiclista}")
 public ResponseEntity<CartaoDeCredito> getCartaoDeCredito(@PathVariable Integer idCiclista) {
-
-    // 1. Usa o novo método do repositório
     Optional<CartaoDeCredito> cartaoOptional = cartaoRepository.findByIdCiclista(idCiclista);
-
     if (cartaoOptional.isPresent()) {
-        // 2. Retorna 200 OK com o cartão
         return ResponseEntity.ok(cartaoOptional.get());
     } else {
-        // 3. Retorna 404 Not Found (Ciclista não tem cartão ou ciclista não existe)
         return ResponseEntity.notFound().build();
     }
 }
 
-// Endpoint: PUT /cartaoDeCredito/{idCiclista} (NOVO)
+/**
+ * Caso de Uso: UC07 - Alterar Cartão
+ * [PUT /cartaoDeCredito/{idCiclista}]
+ */
 @PutMapping("/cartaoDeCredito/{idCiclista}")
 public ResponseEntity<Void> alterarCartaoDeCredito(
         @PathVariable Integer idCiclista,
         @Valid @RequestBody NovoCartaoDeCreditoDTO dto) {
 
-    // 1. Busca o cartão existente pelo ID DO CICLISTA
-    Optional<CartaoDeCredito> cartaoOptional = cartaoRepository.findByIdCiclista(idCiclista);
-
-    if (!cartaoOptional.isPresent()) {
-        // Se não existe, retorna 404 Not Found
-        return ResponseEntity.notFound().build();
+    // Gap UC07-Passo 3: Validar Cartão
+    boolean cartaoValido = externoService.validarCartaoDeCredito(dto);
+    if (!cartaoValido) {
+        // UC07-A2: Cartão reprovado
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build(); // 422
     }
 
-    // 2. Pega o cartão existente
+    Optional<CartaoDeCredito> cartaoOptional = cartaoRepository.findByIdCiclista(idCiclista);
+    if (!cartaoOptional.isPresent()) {
+        return ResponseEntity.notFound().build();
+    }
     CartaoDeCredito cartaoExistente = cartaoOptional.get();
-
-    // 3. Atualiza os dados
     cartaoExistente.setNomeTitular(dto.getNomeTitular());
     cartaoExistente.setNumero(dto.getNumero());
     cartaoExistente.setValidade(dto.getValidade());
     cartaoExistente.setCvv(dto.getCvv());
-
-    // 4. Salva no banco
     cartaoRepository.save(cartaoExistente);
 
-    // 5. Retorna 200 OK (sem corpo, como no Swagger)
+    // Gap UC07-Passo 5: Enviar Email
+    Optional<Ciclista> ciclistaOptional = ciclistaRepository.findById(idCiclista);
+    if (ciclistaOptional.isPresent()) {
+        externoService.enviarEmail(
+                ciclistaOptional.get().getEmail(),
+                "Seu cartão de crédito foi alterado",
+                "Olá. Seu cartão de crédito foi atualizado com sucesso."
+        );
+    }
+
     return ResponseEntity.ok().build();
 }
 
-
 // --- Métodos Auxiliares (Helpers) ---
-
 private Ciclista converterCiclistaDtoParaEntidade(NovoCiclistaDTO dto) {
+    //... (código inalterado)
     Ciclista ciclista = new Ciclista();
     ciclista.setNome(dto.getNome());
     ciclista.setNascimento(dto.getNascimento());
@@ -195,6 +250,7 @@ private Ciclista converterCiclistaDtoParaEntidade(NovoCiclistaDTO dto) {
 }
 
 private CartaoDeCredito converterCartaoDtoParaEntidade(NovoCartaoDeCreditoDTO dto, Integer ciclistaId) {
+    //... (código inalterado)
     CartaoDeCredito cartao = new CartaoDeCredito();
     cartao.setIdCiclista(ciclistaId);
     cartao.setNomeTitular(dto.getNomeTitular());
@@ -205,6 +261,7 @@ private CartaoDeCredito converterCartaoDtoParaEntidade(NovoCartaoDeCreditoDTO dt
 }
 
 private void atualizarEntidadeComDTO(Ciclista entidade, NovoCiclistaDTO dto) {
+    //... (código inalterado)
     entidade.setNome(dto.getNome());
     entidade.setNascimento(dto.getNascimento());
     entidade.setCpf(dto.getCpf());

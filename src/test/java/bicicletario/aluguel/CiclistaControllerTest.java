@@ -5,11 +5,12 @@ import bicicletario.aluguel.dto.CadastroCiclistaDTO;
 import bicicletario.aluguel.dto.NovoCartaoDeCreditoDTO;
 import bicicletario.aluguel.dto.NovoCiclistaDTO;
 import bicicletario.aluguel.dto.PassaporteDTO;
-import bicicletario.aluguel.model.Aluguel; // Import necessário
-import bicicletario.aluguel.model.CartaoDeCredito; // Import necessário
+import bicicletario.aluguel.model.Aluguel;
+import bicicletario.aluguel.model.CartaoDeCredito;
 import bicicletario.aluguel.model.Ciclista;
 import bicicletario.aluguel.model.Passaporte;
-import bicicletario.aluguel.repository.AluguelRepository; // Import necessário
+import bicicletario.aluguel.mock.ExternoService; // --- IMPORTADO PARA O MOCKBEAN ---
+import bicicletario.aluguel.repository.AluguelRepository;
 import bicicletario.aluguel.repository.CartaoDeCreditoRepository;
 import bicicletario.aluguel.repository.CiclistaRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,10 +19,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean; // --- IMPORT NECESSÁRIO ---
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any; // --- IMPORT NECESSÁRIO ---
+import static org.mockito.Mockito.when; // --- IMPORT NECESSÁRIO ---
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -38,16 +43,21 @@ private CiclistaRepository ciclistaRepository;
 @Autowired
 private CartaoDeCreditoRepository cartaoRepository;
 @Autowired
-private AluguelRepository aluguelRepository; // Necessário para /permiteAluguel
+private AluguelRepository aluguelRepository;
 @Autowired
 private ObjectMapper objectMapper;
 
+@MockBean
+private ExternoService externoService;
+
 @BeforeEach
 void setUp() {
-    // Ordem de limpeza (filhos primeiro)
     cartaoRepository.deleteAll();
     aluguelRepository.deleteAll();
     ciclistaRepository.deleteAll();
+
+    when(externoService.validarCartaoDeCredito(any(NovoCartaoDeCreditoDTO.class)))
+            .thenReturn(true);
 }
 
 @Test
@@ -55,7 +65,12 @@ void contextLoads() {
     assertNotNull(controller);
 }
 
-// --- TESTE POST /ciclista ---
+// --- TESTES POST /ciclista (UC01) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC01.
+ * Dados válidos, cartão válido.
+ */
 @Test
 void testCadastrarCiclista_ComDadosValidos_DeveRetornar201Created() throws Exception {
     CadastroCiclistaDTO requisicaoCompleta = criarCadastroCiclistaDTOValido();
@@ -71,7 +86,46 @@ void testCadastrarCiclista_ComDadosValidos_DeveRetornar201Created() throws Excep
     assertTrue(cartaoRepository.count() > 0);
 }
 
+/**
+ * NOVO TESTE: Testa a falha do UC01 (Fluxo Alternativo A3).
+ * Dados válidos, mas o mock do ExternoService retorna "Cartão Inválido".
+ */
+@Test
+void testCadastrarCiclista_ComCartaoInvalido_DeveRetornar422() throws Exception {
+    when(externoService.validarCartaoDeCredito(any(NovoCartaoDeCreditoDTO.class)))
+            .thenReturn(false); // FORÇA A FALHA
+
+    CadastroCiclistaDTO requisicaoCompleta = criarCadastroCiclistaDTOValido();
+    String jsonRequisicao = objectMapper.writeValueAsString(requisicaoCompleta);
+
+    mockMvc.perform(post("/ciclista")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+/**
+ * NOVO TESTE: Testa a falha do UC01 (Validação @Valid).
+ * Dados do DTO são inválidos (ex: email mal formatado).
+ */
+@Test
+void testCadastrarCiclista_ComDadosInvalidos_DeveRetornar422() throws Exception {
+    CadastroCiclistaDTO requisicao = criarCadastroCiclistaDTOValido();
+    requisicao.getCiclista().setEmail("email-invalido.com"); // Dado inválido
+    String jsonRequisicao = objectMapper.writeValueAsString(requisicao);
+
+    mockMvc.perform(post("/ciclista")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+
 // --- TESTES GET /ciclista/{id} ---
+
+/**
+ * Testa GET /ciclista/{id} (Caminho Feliz)
+ */
 @Test
 void testRecuperarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {
     Ciclista ciclistaSalvo = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -82,13 +136,20 @@ void testRecuperarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {
             .andExpect(jsonPath("$.id").value(idSalvo));
 }
 
+/**
+ * Testa GET /ciclista/{id} (Falha 404)
+ */
 @Test
 void testRecuperarCiclista_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     mockMvc.perform(get("/ciclista/999"))
             .andExpect(status().isNotFound());
 }
 
-// --- TESTES PUT /ciclista/{id} ---
+// --- TESTES PUT /ciclista/{id} (UC06) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC06.
+ */
 @Test
 void testEditarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {
     Ciclista ciclistaSalvo = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -104,6 +165,9 @@ void testEditarCiclista_ComIdExistente_DeveRetornar200OK() throws Exception {
             .andExpect(jsonPath("$.nome").value("Ciclista Nome Atualizado"));
 }
 
+/**
+ * Testa a falha 404 do UC06.
+ */
 @Test
 void testEditarCiclista_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     String jsonRequisicao = objectMapper.writeValueAsString(criarNovoCiclistaDTOValido());
@@ -113,12 +177,33 @@ void testEditarCiclista_ComIdInexistente_DeveRetornar404NotFound() throws Except
             .andExpect(status().isNotFound());
 }
 
-// --- TESTES POST /ciclista/{id}/ativar ---
+/**
+ * Testa a falha 422 (@Valid) do UC06 (Fluxo Alternativo A2).
+ */
+@Test
+void testEditarCiclista_ComDadosInvalidos_DeveRetornar422UnprocessableEntity() throws Exception {
+    Ciclista ciclistaSalvo = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
+    Integer idSalvo = ciclistaSalvo.getId();
+    NovoCiclistaDTO dtoInvalido = criarNovoCiclistaDTOValido();
+    dtoInvalido.setEmail("emailinvalido.com"); // <-- DADO INVÁLIDO
+    String jsonRequisicao = objectMapper.writeValueAsString(dtoInvalido);
+
+    mockMvc.perform(put("/ciclista/" + idSalvo)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+// --- TESTES POST /ciclista/{id}/ativar (UC02) ---
+
+/**
+ * Testa o "Caminho Feliz" do UC02.
+ */
 @Test
 void testAtivarCadastro_ComIdExistente_DeveRetornar200EStatusAtivo() throws Exception {
     NovoCiclistaDTO dto = criarNovoCiclistaDTOValido();
     Ciclista ciclista = converterDtoParaEntidade(dto);
-    ciclista.setStatus("AGUARDANDO_CONFIRMACAO");
+    ciclista.setStatus("AGUARDANDO_CONFIRMACAO"); // Estado inicial
     Ciclista ciclistaSalvo = ciclistaRepository.save(ciclista);
     Integer idSalvo = ciclistaSalvo.getId();
 
@@ -127,34 +212,21 @@ void testAtivarCadastro_ComIdExistente_DeveRetornar200EStatusAtivo() throws Exce
             .andExpect(jsonPath("$.status").value("ATIVO"));
 }
 
+/**
+ * Testa a falha 404 do UC02.
+ */
 @Test
 void testAtivarCadastro_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     mockMvc.perform(post("/ciclista/999/ativar"))
             .andExpect(status().isNotFound());
 }
-// TESTE DE VALIDAÇÃO (NOVO)
-@Test
-void testEditarCiclista_ComDadosInvalidos_DeveRetornar422UnprocessableEntity() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    // Salva um ciclista no banco
-    Ciclista ciclistaSalvo = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
-    Integer idSalvo = ciclistaSalvo.getId();
 
-    // Cria um DTO com dados INVÁLIDOS (e-mail sem '@')
-    NovoCiclistaDTO dtoInvalido = criarNovoCiclistaDTOValido();
-    dtoInvalido.setEmail("emailinvalido.com"); // <-- DADO INVÁLIDO
 
-    String jsonRequisicao = objectMapper.writeValueAsString(dtoInvalido);
+// --- TESTES GET /ciclista/{id}/permiteAluguel (Suporte UC03) ---
 
-    // --- 2. Agir (Act) ---
-    mockMvc.perform(put("/ciclista/" + idSalvo)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(jsonRequisicao))
-
-            // --- 3. Afirmar (Assert) ---
-            .andExpect(status().isUnprocessableEntity()); // Espera 422
-}
-// --- TESTES GET /ciclista/{id}/permiteAluguel ---
+/**
+ * Testa o "Caminho Feliz" do GET /permiteAluguel (Retorna true).
+ */
 @Test
 void testPermiteAluguel_ComCiclistaApto_DeveRetornarTrue() throws Exception {
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -165,6 +237,9 @@ void testPermiteAluguel_ComCiclistaApto_DeveRetornarTrue() throws Exception {
             .andExpect(content().string("true"));
 }
 
+/**
+ * Testa o "Caminho Feliz" do GET /permiteAluguel (Retorna false).
+ */
 @Test
 void testPermiteAluguel_ComCiclistaInapto_DeveRetornarFalse() throws Exception {
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -180,6 +255,9 @@ void testPermiteAluguel_ComCiclistaInapto_DeveRetornarFalse() throws Exception {
             .andExpect(content().string("false"));
 }
 
+/**
+ * Testa a falha 404 do GET /permiteAluguel.
+ */
 @Test
 void testPermiteAluguel_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     mockMvc.perform(get("/ciclista/999/permiteAluguel"))
@@ -187,6 +265,10 @@ void testPermiteAluguel_ComIdInexistente_DeveRetornar404NotFound() throws Except
 }
 
 // --- TESTES GET /ciclista/{id}/bicicletaAlugada ---
+
+/**
+ * Testa GET /bicicletaAlugada (Caminho Feliz, com aluguel).
+ */
 @Test
 void testGetBicicletaAlugada_ComCiclistaComAluguel_DeveRetornarBicicletaMock() throws Exception {
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -204,6 +286,9 @@ void testGetBicicletaAlugada_ComCiclistaComAluguel_DeveRetornarBicicletaMock() t
             .andExpect(jsonPath("$.modelo").value("Modelo Falso (DTO)"));
 }
 
+/**
+ * Testa GET /bicicletaAlugada (Caminho Feliz, sem aluguel).
+ */
 @Test
 void testGetBicicletaAlugada_ComCiclistaSemAluguel_DeveRetornarVazio() throws Exception {
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
@@ -214,13 +299,20 @@ void testGetBicicletaAlugada_ComCiclistaSemAluguel_DeveRetornarVazio() throws Ex
             .andExpect(content().string(""));
 }
 
+/**
+ * Testa GET /bicicletaAlugada (Falha 404).
+ */
 @Test
 void testGetBicicletaAlugada_ComIdInexistente_DeveRetornar404NotFound() throws Exception {
     mockMvc.perform(get("/ciclista/999/bicicletaAlugada"))
             .andExpect(status().isNotFound());
 }
 
-// --- TESTES GET /ciclista/existeEmail/{email} ---
+// --- TESTES GET /ciclista/existeEmail/{email} (Suporte UC01) ---
+
+/**
+ * Testa GET /existeEmail (Retorna true).
+ */
 @Test
 void testExisteEmail_ComEmailExistente_DeveRetornarTrue() throws Exception {
     NovoCiclistaDTO dto = criarNovoCiclistaDTOValido();
@@ -232,6 +324,9 @@ void testExisteEmail_ComEmailExistente_DeveRetornarTrue() throws Exception {
             .andExpect(content().string("true"));
 }
 
+/**
+ * Testa GET /existeEmail (Retorna false).
+ */
 @Test
 void testExisteEmail_ComEmailInexistente_DeveRetornarFalse() throws Exception {
     mockMvc.perform(get("/ciclista/existeEmail/nao.existe@teste.com"))
@@ -239,86 +334,130 @@ void testExisteEmail_ComEmailInexistente_DeveRetornarFalse() throws Exception {
             .andExpect(content().string("false"));
 }
 
-// --- TESTES PARA /cartaoDeCredito/{idCiclista} (NOVOS) ---
+// --- TESTES PARA /cartaoDeCredito/{idCiclista} (UC07) ---
 
+/**
+ * Testa GET /cartaoDeCredito/{id} (Caminho Feliz).
+ */
 @Test
 void testGetCartaoDeCredito_ComIdCiclistaExistente_DeveRetornar200OK() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    // Salva um ciclista e um cartão para ele
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
     Integer idCiclistaSalvo = ciclista.getId();
-
     CartaoDeCredito cartao = new CartaoDeCredito();
     cartao.setIdCiclista(idCiclistaSalvo);
     cartao.setNumero("1111222233334444");
     cartaoRepository.save(cartao);
 
-    // --- 2. Agir (Act) ---
     mockMvc.perform(get("/cartaoDeCredito/" + idCiclistaSalvo))
-            // --- 3. Afirmar (Assert) ---
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.idCiclista").value(idCiclistaSalvo))
             .andExpect(jsonPath("$.numero").value("1111222233334444"));
 }
 
+/**
+ * Testa GET /cartaoDeCredito/{id} (Falha 404).
+ */
 @Test
 void testGetCartaoDeCredito_ComIdCiclistaInexistente_DeveRetornar404NotFound() throws Exception {
-    // --- 2. Agir (Act) ---
     mockMvc.perform(get("/cartaoDeCredito/999")) // ID inexistente
-            // --- 3. Afirmar (Assert) ---
             .andExpect(status().isNotFound());
 }
 
+/**
+ * Testa o "Caminho Feliz" do UC07 (PUT /cartaoDeCredito).
+ */
 @Test
 void testAlterarCartaoDeCredito_ComIdCiclistaExistente_DeveRetornar200OK() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    // Salva um ciclista e um cartão para ele
     Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
     Integer idCiclistaSalvo = ciclista.getId();
-
     CartaoDeCredito cartao = new CartaoDeCredito();
     cartao.setIdCiclista(idCiclistaSalvo);
     cartao.setNumero("1111222233334444");
     cartao.setNomeTitular("Nome Antigo");
     cartaoRepository.save(cartao);
 
-    // Cria o DTO de atualização
-    NovoCartaoDeCreditoDTO dtoAtualizado = new NovoCartaoDeCreditoDTO();
+    // --- CORREÇÃO ---
+    NovoCartaoDeCreditoDTO dtoAtualizado = criarCadastroCiclistaDTOValido().getMeioDePagamento();
+    // --- FIM DA CORREÇÃO ---
+
     dtoAtualizado.setNomeTitular("Nome Novo");
-    dtoAtualizado.setNumero("9999888877776666");
-    dtoAtualizado.setValidade("2030-12-01");
-    dtoAtualizado.setCvv("123");
     String jsonRequisicao = objectMapper.writeValueAsString(dtoAtualizado);
 
-    // --- 2. Agir (Act) ---
     mockMvc.perform(put("/cartaoDeCredito/" + idCiclistaSalvo)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
-            // --- 3. Afirmar (Assert) ---
-            .andExpect(status().isOk()); // Espera 200 OK (sem corpo)
+            .andExpect(status().isOk());
 }
 
+/**
+ * Testa a falha 404 do UC07.
+ */
 @Test
 void testAlterarCartaoDeCredito_ComIdCiclistaInexistente_DeveRetornar404NotFound() throws Exception {
-    // --- 1. Organizar (Arrange) ---
-    NovoCartaoDeCreditoDTO dtoAtualizado = new NovoCartaoDeCreditoDTO();
-    dtoAtualizado.setNomeTitular("Nome Novo");
-    dtoAtualizado.setNumero("9999888877776666");
-    dtoAtualizado.setValidade("2030-12-01");
-    dtoAtualizado.setCvv("123");
+    // --- CORREÇÃO ---
+    NovoCartaoDeCreditoDTO dtoAtualizado = criarCadastroCiclistaDTOValido().getMeioDePagamento();
+    // --- FIM DA CORREÇÃO ---
     String jsonRequisicao = objectMapper.writeValueAsString(dtoAtualizado);
 
-    // --- 2. Agir (Act) ---
     mockMvc.perform(put("/cartaoDeCredito/999") // ID inexistente
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
-            // --- 3. Afirmar (Assert) ---
             .andExpect(status().isNotFound());
+}
+
+/**
+ * NOVO TESTE: Testa a falha do UC07 (Fluxo Alternativo A2).
+ * Cartão é reprovado pelo mock do ExternoService.
+ */
+@Test
+void testAlterarCartaoDeCredito_ComCartaoInvalido_DeveRetornar422() throws Exception {
+    Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
+    Integer idCiclistaSalvo = ciclista.getId();
+    CartaoDeCredito cartao = new CartaoDeCredito();
+    cartao.setIdCiclista(idCiclistaSalvo);
+    cartao.setNumero("1111222233334444");
+    cartaoRepository.save(cartao);
+
+    when(externoService.validarCartaoDeCredito(any(NovoCartaoDeCreditoDTO.class)))
+            .thenReturn(false); // FORÇA A FALHA
+
+    // --- CORREÇÃO ---
+    NovoCartaoDeCreditoDTO dtoAtualizado = criarCadastroCiclistaDTOValido().getMeioDePagamento();
+    // --- FIM DA CORREÇÃO ---
+    String jsonRequisicao = objectMapper.writeValueAsString(dtoAtualizado);
+
+    mockMvc.perform(put("/cartaoDeCredito/" + idCiclistaSalvo)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+/**
+ * NOVO TESTE: Testa a falha 422 (@Valid) do UC07.
+ */
+@Test
+void testAlterarCartaoDeCredito_ComDadosInvalidos_DeveRetornar422() throws Exception {
+    Ciclista ciclista = ciclistaRepository.save(converterDtoParaEntidade(criarNovoCiclistaDTOValido()));
+    Integer idCiclistaSalvo = ciclista.getId();
+    CartaoDeCredito cartao = new CartaoDeCredito();
+    cartao.setIdCiclista(idCiclistaSalvo);
+    cartao.setNumero("1111222233334444");
+    cartaoRepository.save(cartao);
+
+    // --- CORREÇÃO ---
+    NovoCartaoDeCreditoDTO dtoInvalido = criarCadastroCiclistaDTOValido().getMeioDePagamento();
+    // --- FIM DA CORREÇÃO ---
+    dtoInvalido.setCvv(""); // Dado inválido (NotBlank)
+    String jsonRequisicao = objectMapper.writeValueAsString(dtoInvalido);
+
+    mockMvc.perform(put("/cartaoDeCredito/" + idCiclistaSalvo)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
 }
 
 
 // --- Métodos Auxiliares (Helpers) para os Testes ---
-
 private CadastroCiclistaDTO criarCadastroCiclistaDTOValido() {
     PassaporteDTO passaporte = new PassaporteDTO();
     passaporte.setNumero("123456");
