@@ -46,7 +46,7 @@ private static final Integer BICICLETA_ID = 123;
 private static final Integer TRANCA_ID = 10;
 
 // VARIÁVEL PARA O ID GERADO PELO BANCO
-private Integer ciclistaIdGerado;
+private Integer ciclistaIdGerado; // Este será o ciclista "ATIVO"
 
 @BeforeEach
 void setUp() {
@@ -55,9 +55,9 @@ void setUp() {
     devolucaoRepository.deleteAll();
     ciclistaRepository.deleteAll();
 
-    // 2. Cria o ciclista ativo e DEIXA O BANCO GERAR O ID
+    // 2. Cria o ciclista ATIVO (para os testes de "caminho feliz")
     Ciclista ciclista = new Ciclista();
-    ciclista.setStatus("ATIVO");
+    ciclista.setStatus("ATIVO"); // Status "ATIVO" para os testes padrão
     ciclista.setNome("Testador Ativo");
 
     // 3. Salva e armazena o ID real gerado
@@ -69,12 +69,12 @@ void setUp() {
 
 /**
  * Testa o "Caminho Feliz" do UC03.
- * Ciclista ativo, sem aluguel, bicicleta disponível, pagamento OK.
+ * Usa o ciclista ATIVO criado no setUp().
  */
 @Test
 void testRealizarAluguel_ComCiclistaAtivo_DeveRetornar200OK() throws Exception {
     NovoAluguelDTO dto = new NovoAluguelDTO();
-    dto.setCiclista(ciclistaIdGerado);
+    dto.setCiclista(ciclistaIdGerado); // Usa o ciclista ATIVO
     dto.setTrancaInicio(TRANCA_ID);
     String jsonRequisicao = objectMapper.writeValueAsString(dto);
 
@@ -82,7 +82,7 @@ void testRealizarAluguel_ComCiclistaAtivo_DeveRetornar200OK() throws Exception {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.cobranca").value(100)); // Espera o ID do mock de cobrança
+            .andExpect(jsonPath("$.cobranca").value(100));
 
     assertEquals(1, aluguelRepository.count());
     assertTrue(aluguelRepository.findByCiclistaAndHoraFimIsNull(ciclistaIdGerado).isPresent());
@@ -94,7 +94,7 @@ void testRealizarAluguel_ComCiclistaAtivo_DeveRetornar200OK() throws Exception {
  */
 @Test
 void testRealizarAluguel_ComCiclistaInativo_DeveRetornar422Unprocessable() throws Exception {
-    // 1. Altera o status do ciclista para INATIVO
+    // 1. Altera o status do ciclista do setUp() para INATIVO
     Ciclista ciclista = ciclistaRepository.findById(ciclistaIdGerado).get();
     ciclista.setStatus("INATIVO");
     ciclistaRepository.save(ciclista);
@@ -114,16 +114,45 @@ void testRealizarAluguel_ComCiclistaInativo_DeveRetornar422Unprocessable() throw
 }
 
 /**
+ * NOVO TESTE DE FALHA (Cobre o Bug do Postman)
+ * Testa a falha do UC03 (Pré-condição).
+ * Ciclista com status "AGUARDANDO_CONFIRMACAO".
+ */
+@Test
+void testRealizarAluguel_ComCiclistaNaoAtivo_DeveRetornar422() throws Exception {
+    // --- 1. Organizar (Arrange) ---
+    // Cria um NOVO ciclista separado do setUp()
+    Ciclista ciclistaNaoAtivo = new Ciclista();
+    ciclistaNaoAtivo.setStatus("AGUARDANDO_CONFIRMACAO"); // O status real pós-cadastro
+    ciclistaNaoAtivo.setNome("Testador Nao Ativo");
+    Ciclista ciclistaSalvo = ciclistaRepository.save(ciclistaNaoAtivo);
+    Integer idNaoAtivo = ciclistaSalvo.getId();
+
+    // --- 2. Agir (Act) ---
+    NovoAluguelDTO dto = new NovoAluguelDTO();
+    dto.setCiclista(idNaoAtivo); // Tenta alugar com o ID não ativo
+    dto.setTrancaInicio(TRANCA_ID);
+    String jsonRequisicao = objectMapper.writeValueAsString(dto);
+
+    mockMvc.perform(post("/aluguel")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequisicao))
+            // --- 3. Afirmar (Assert) ---
+            .andExpect(status().isUnprocessableEntity()); // Espera 422
+}
+
+
+/**
  * NOVO TESTE DE FALHA (Cobre o Gap UC03-R1)
  * Testa a regra "só pode pegar uma bicicleta por vez".
  */
 @Test
 void testRealizarAluguel_ComCiclistaJaComAluguelAtivo_DeveRetornar422() throws Exception {
+    // (O ciclista do setUp() está ATIVO, o que é necessário para este teste)
     // --- 1. Organizar (Arrange) ---
-    // Cria um aluguel ATIVO para o ciclista
     Aluguel aluguelAtivo = new Aluguel();
-    aluguelAtivo.setCiclista(ciclistaIdGerado);
-    aluguelAtivo.setBicicleta(999); // Outra bicicleta
+    aluguelAtivo.setCiclista(ciclistaIdGerado); // Usa o ciclista ATIVO
+    aluguelAtivo.setBicicleta(999);
     aluguelAtivo.setTrancaInicio(99);
     aluguelAtivo.setHoraInicio(LocalDateTime.now().minusMinutes(30));
     aluguelRepository.save(aluguelAtivo);
@@ -131,7 +160,7 @@ void testRealizarAluguel_ComCiclistaJaComAluguelAtivo_DeveRetornar422() throws E
     // Prepara a DTO para uma *nova* tentativa de aluguel
     NovoAluguelDTO dto = new NovoAluguelDTO();
     dto.setCiclista(ciclistaIdGerado);
-    dto.setTrancaInicio(TRANCA_ID); // Tentando alugar a bicicleta 123
+    dto.setTrancaInicio(TRANCA_ID);
     String jsonRequisicao = objectMapper.writeValueAsString(dto);
 
     // --- 2. Agir (Act) ---
@@ -141,7 +170,6 @@ void testRealizarAluguel_ComCiclistaJaComAluguelAtivo_DeveRetornar422() throws E
             // --- 3. Afirmar (Assert) ---
             .andExpect(status().isUnprocessableEntity()); // Espera 422
 
-    // Garante que o novo aluguel NÃO foi criado
     assertEquals(1, aluguelRepository.count());
 }
 
@@ -150,10 +178,10 @@ void testRealizarAluguel_ComCiclistaJaComAluguelAtivo_DeveRetornar422() throws E
 
 /**
  * Testa o UC04 (Caminho Feliz) SEM taxa extra.
- * Cobre a lógica de cálculo de taxa (<= 120 min).
  */
 @Test
 void testRealizarDevolucao_ComAluguelAtivo_SemTaxaExtra_DeveRetornar200() throws Exception {
+    // (O ciclista do setUp() está ATIVO)
     // --- 1. Organizar (Cria um aluguel de 1 hora) ---
     Aluguel aluguel = new Aluguel();
     aluguel.setCiclista(ciclistaIdGerado);
@@ -174,22 +202,19 @@ void testRealizarDevolucao_ComAluguelAtivo_SemTaxaExtra_DeveRetornar200() throws
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
             .andExpect(status().isOk())
-            // Espera 'null' (isEmpty) pois 1h não gera taxa extra
             .andExpect(jsonPath("$.cobranca").isEmpty());
 
-    // --- 3. Afirmar (Checa o estado do banco) ---
     assertFalse(aluguelRepository.findByBicicletaAndHoraFimIsNull(BICICLETA_ID).isPresent());
     assertEquals(1, devolucaoRepository.count());
 }
 
 /**
  * Testa o UC04 (Fluxo Alternativo A1) COM taxa extra.
- * Cobre a regra UC04-R1.
  */
 @Test
 void testRealizarDevolucao_ComAluguelAtivo_ComTaxaExtra_DeveRetornar200() throws Exception {
+    // (O ciclista do setUp() está ATIVO)
     // --- 1. Organizar (Cria um aluguel de 151 minutos) ---
-    // 151 min = 2h 31m. Excedeu 31 min -> Deve cobrar 2 períodos de 30 min.
     Aluguel aluguel = new Aluguel();
     aluguel.setCiclista(ciclistaIdGerado);
     aluguel.setBicicleta(BICICLETA_ID);
@@ -209,20 +234,18 @@ void testRealizarDevolucao_ComAluguelAtivo_ComTaxaExtra_DeveRetornar200() throws
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(jsonRequisicao))
             .andExpect(status().isOk())
-            // Espera o ID 101 (do mock de cobrança extra)
             .andExpect(jsonPath("$.cobranca").value(101));
 
-    // --- 3. Afirmar (Checa o estado do banco) ---
     assertFalse(aluguelRepository.findByBicicletaAndHoraFimIsNull(BICICLETA_ID).isPresent());
     assertEquals(1, devolucaoRepository.count());
 }
 
 /**
  * Testa o UC04 (Fluxo de Exceção).
- * Tentativa de devolver uma bicicleta que não está alugada.
  */
 @Test
 void testRealizarDevolucao_SemAluguelAtivo_DeveRetornar404NotFound() throws Exception {
+    // (Código inalterado)
     DevolucaoDTO dto = new DevolucaoDTO();
     dto.setIdBicicleta(BICICLETA_ID);
     dto.setIdTranca(20);
@@ -239,6 +262,7 @@ void testRealizarDevolucao_SemAluguelAtivo_DeveRetornar404NotFound() throws Exce
 // --- TESTE PARA GET /restaurarBanco ---
 @Test
 void testRestaurarBanco_DeveLimparRepositorios() throws Exception {
+    // (Código inalterado)
     aluguelRepository.save(new Aluguel());
     devolucaoRepository.save(new Devolucao());
 

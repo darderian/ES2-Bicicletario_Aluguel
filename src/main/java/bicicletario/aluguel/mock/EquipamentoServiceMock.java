@@ -10,7 +10,7 @@ public class EquipamentoServiceMock implements EquipamentoService {
 public BicicletaDTO getBicicletaDaTranca(Integer idTranca) {
     // MOCK LÓGICA (Gap do UC03)
     // Estamos simulando que qualquer tranca tem uma bicicleta "DISPONÍVEL"
-    // com ID = 123 (a lógica que estava hardcoded)
+    // com ID = 123
     BicicletaDTO bicicletaMock = new BicicletaDTO();
     bicicletaMock.setId(123);
     bicicletaMock.setModelo("Mock: Bicicleta da Tranca " + idTranca);
