@@ -116,7 +116,7 @@ public ResponseEntity<Boolean> permiteAluguel(@PathVariable Integer idCiclista) 
  * [GET /ciclista/{idCiclista}/bicicletaAlugada]
  */
 @GetMapping("/ciclista/{idCiclista}/bicicletaAlugada")
-public ResponseEntity<?> getBicicletaAlugada(@PathVariable Integer idCiclista) {
+public ResponseEntity<Object> getBicicletaAlugada(@PathVariable Integer idCiclista) {
     if (!ciclistaRepository.existsById(idCiclista)) {
         return ResponseEntity.notFound().build();
     }
