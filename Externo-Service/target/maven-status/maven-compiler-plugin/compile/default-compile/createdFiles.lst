@@ -1,0 +1,8 @@
+bicicletario\externo\dto\CartaoDTO.class
+bicicletario\externo\controller\ExternoController.class
+bicicletario\externo\ExternoApplication.class
+bicicletario\externo\model\Cobranca.class
+bicicletario\externo\service\ExternoService.class
+bicicletario\externo\dto\NovaCobrancaDTO.class
+bicicletario\externo\repository\CobrancaRepository.class
+bicicletario\externo\dto\EmailDTO.class
