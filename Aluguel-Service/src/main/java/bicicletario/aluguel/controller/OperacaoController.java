@@ -97,16 +97,16 @@ public ResponseEntity<String> restaurarDados() {
 
 private void criarDadosIniciais() {
     // --- CICLISTA 1 ---
-    criarCiclistaComCartao("Fulano Beltrano", "CONFIRMADO", "user@example.com", "78804034009");
+    criarCiclistaComCartao("Fulano Beltrano", "ATIVO", "user@example.com", "78804034009");
 
     // --- CICLISTA 2 ---
     criarCiclistaComCartao("Fulano Beltrano", "AGUARDANDO_CONFIRMACAO", "user2@example.com", "43943488039");
 
     // --- CICLISTA 3 ---
-    criarCiclistaComCartao("Fulano Beltrano", "CONFIRMADO", "user3@example.com", "10243164084");
+    criarCiclistaComCartao("Fulano Beltrano", "ATIVO", "user3@example.com", "10243164084");
 
     // --- CICLISTA 4 ---
-    criarCiclistaComCartao("Fulano Beltrano", "CONFIRMADO", "user4@example.com", "30880150017");
+    criarCiclistaComCartao("Fulano Beltrano", "ATIVO", "user4@example.com", "30880150017");
 }
 
 private void criarCiclistaComCartao(String nome, String status, String email, String cpf) {
