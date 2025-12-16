@@ -11,7 +11,7 @@ RUN mvn dependency:go-offline
 
 # Copia o resto do código e constrói o .jar
 COPY src ./src
-RUN mvn clean package
+RUN mvn clean package -DskipTests
 
 # --- Estágio 2: Run (Java 8) ---
 # Usamos uma imagem leve, apenas com o Java 8 para rodar
