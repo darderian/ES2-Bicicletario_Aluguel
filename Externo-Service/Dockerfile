@@ -20,7 +20,7 @@ FROM eclipse-temurin:8-jre-jammy
 WORKDIR /app
 
 # Copia o .jar correto que você definiu no pom.xml
-COPY --from=build /app/target/aluguel-service.jar app.jar
+COPY --from=build /app/target/*.jar app.jar
 
 # O Render define a porta; este comando diz ao Spring para usá-la
 ENV PORT 8080
