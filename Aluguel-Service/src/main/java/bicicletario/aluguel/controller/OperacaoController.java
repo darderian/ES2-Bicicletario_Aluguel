@@ -36,12 +36,13 @@ private AluguelService aluguelService;
  * Caso de Uso: UC03 - Alugar bicicleta
  */
 @PostMapping("/aluguel")
-public ResponseEntity<Aluguel> realizarAluguel(@Valid @RequestBody NovoAluguelDTO dto) {
+public ResponseEntity<?> realizarAluguel(@Valid @RequestBody NovoAluguelDTO dto) {
     try {
         Aluguel aluguel = aluguelService.realizarAluguel(dto);
         return ResponseEntity.ok(aluguel);
     } catch (IllegalArgumentException e) {
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build();
+        // CORREÇÃO RÁPIDA: Retorna a mensagem de erro no corpo (que contém o JSON do Equipamento)
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(e.getMessage());
     }
 }
 
