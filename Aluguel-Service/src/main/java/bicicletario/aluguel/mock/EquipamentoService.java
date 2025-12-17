@@ -3,13 +3,22 @@ package bicicletario.aluguel.mock;
 import bicicletario.aluguel.dto.BicicletaDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class EquipamentoService {
 
+// ⚠️ ADICIONE ESSA LINHA PARA LOGAR OS AVISOS
+private static final Logger logger = LoggerFactory.getLogger(EquipamentoService.class);
+
 // Se o colega te passar a URL, configure no application.properties.
-// Se não, ele tenta conectar na porta 8082 (que provavelmente não existe).
+// Se não, ele tenta conectar no localhost:8082 (ou o valor padrão)
 @Value("${url.equipamento:http://localhost:8082}")
 private String equipamentoUrl;
 
@@ -23,18 +32,30 @@ public BicicletaDTO getBicicletaDaTranca(Integer idTranca) {
         // Tenta conectar no serviço real do colega
         String url = equipamentoUrl + "/tranca/" + idTranca + "/bicicleta";
         return restTemplate.getForObject(url, BicicletaDTO.class);
-    } catch (Exception e) {
-        // FALLBACK (PLANO B): Retorna um dado fictício para não travar a demo
-        System.err.println("⚠️ [EQUIPAMENTO] Offline ou Erro. Usando Mock para Tranca " + idTranca);
 
-        BicicletaDTO mock = new BicicletaDTO();
-        mock.setId(999); // ID fixo para teste
-        mock.setNumero(123);
-        mock.setMarca("Caloi Mock");
-        mock.setModelo("Veloz");
-        mock.setStatus("DISPONIVEL");
-        return mock;
+    } catch (ResourceAccessException e) {
+        // CENÁRIO 1: FALHA DE CONEXÃO (Não achou o servidor: localhost ou URL errada/off)
+        logger.warn("⚠️ [EQUIPAMENTO] Conexão falhou (Timeout/Recusada). Usando Mock. Tranca: {}. Causa: {}", idTranca, e.getMessage());
+
+    } catch (HttpClientErrorException | HttpServerErrorException e) {
+        // CENÁRIO 2: ERRO HTTP RETORNADO (4xx ou 5xx - INCLUI O 502 BAD GATEWAY HTML)
+        logger.error("⚠️ [EQUIPAMENTO] Falha HTTP. Status: {}. Usando Mock. Tranca: {}. Corpo da Resposta: {}",
+                e.getStatusCode(), idTranca, e.getResponseBodyAsString());
+
+    } catch (RestClientException e) {
+        // CENÁRIO 3: QUALQUER OUTRA FALHA DE REST TEMPLATE
+        logger.error("⚠️ [EQUIPAMENTO] Erro inesperado do RestTemplate. Usando Mock. Tranca: {}. Erro: {}", idTranca, e.getMessage());
     }
+
+    // 🟢 FALLBACK (PLANO B): Retorna um dado fictício para não travar a demo
+    logger.warn(">>> SIMULANDO BUSCA DA BICICLETA {}/{} com sucesso (MOCK).", 999, idTranca);
+    BicicletaDTO mock = new BicicletaDTO();
+    mock.setId(999); // ID fixo para teste
+    mock.setNumero(123);
+    mock.setMarca("Caloi Mock");
+    mock.setModelo("Veloz");
+    mock.setStatus("DISPONIVEL");
+    return mock;
 }
 
 /**
@@ -44,10 +65,24 @@ public void destrancarTranca(Integer idTranca) {
     try {
         String url = equipamentoUrl + "/tranca/" + idTranca + "/destrancar";
         restTemplate.postForLocation(url, null);
-        System.out.println("✅ [EQUIPAMENTO] Tranca " + idTranca + " destrancada no serviço real.");
-    } catch (Exception e) {
-        System.err.println("⚠️ [EQUIPAMENTO] Offline. Simulando destranca da tranca " + idTranca);
+        logger.info("✅ [EQUIPAMENTO] Tranca {} destrancada no serviço real.", idTranca);
+
+    } catch (ResourceAccessException e) {
+        // CENÁRIO 1: FALHA DE CONEXÃO
+        logger.warn("⚠️ [EQUIPAMENTO] Conexão falhou (Timeout/Recusada). Usando Mock. Tranca: {}. Causa: {}", idTranca, e.getMessage());
+
+    } catch (HttpClientErrorException | HttpServerErrorException e) {
+        // CENÁRIO 2: ERRO HTTP RETORNADO (4xx ou 5xx - INCLUI O 502 BAD GATEWAY HTML)
+        logger.error("⚠️ [EQUIPAMENTO] Falha HTTP. Status: {}. Usando Mock. Tranca: {}. Corpo da Resposta: {}",
+                e.getStatusCode(), idTranca, e.getResponseBodyAsString());
+
+    } catch (RestClientException e) {
+        // CENÁRIO 3: QUALQUER OUTRA FALHA
+        logger.error("⚠️ [EQUIPAMENTO] Erro inesperado do RestTemplate. Usando Mock. Tranca: {}. Erro: {}", idTranca, e.getMessage());
     }
+
+    // 🟢 ATIVAÇÃO DO MOCK
+    logger.warn(">>> SIMULANDO DESTANCAMENTO da tranca {} com sucesso (MOCK).", idTranca);
 }
 
 /**
@@ -56,13 +91,24 @@ public void destrancarTranca(Integer idTranca) {
 public void trancarTranca(Integer idTranca, Integer idBicicleta) {
     try {
         String url = equipamentoUrl + "/tranca/" + idTranca + "/trancar"; // Ajuste conforme a rota do colega
-        // Enviaria o objeto bicicleta ou só o ID, dependendo da API dele.
-        // Aqui estamos assumindo um POST simples.
         restTemplate.postForLocation(url, idBicicleta);
-        System.out.println("✅ [EQUIPAMENTO] Tranca " + idTranca + " trancada.");
-    } catch (Exception e) {
-        System.err.println("⚠️ [EQUIPAMENTO] Offline. Simulando trancamento.");
+        logger.info("✅ [EQUIPAMENTO] Tranca {} trancada no serviço real.", idTranca);
+    } catch (ResourceAccessException e) {
+        // CENÁRIO 1: FALHA DE CONEXÃO
+        logger.warn("⚠️ [EQUIPAMENTO] Conexão falhou (Timeout/Recusada). Usando Mock. Tranca: {}. Causa: {}", idTranca, e.getMessage());
+
+    } catch (HttpClientErrorException | HttpServerErrorException e) {
+        // CENÁRIO 2: ERRO HTTP RETORNADO (4xx ou 5xx)
+        logger.error("⚠️ [EQUIPAMENTO] Falha HTTP. Status: {}. Usando Mock. Tranca: {}. Corpo da Resposta: {}",
+                e.getStatusCode(), idTranca, e.getResponseBodyAsString());
+
+    } catch (RestClientException e) {
+        // CENÁRIO 3: QUALQUER OUTRA FALHA
+        logger.error("⚠️ [EQUIPAMENTO] Erro inesperado do RestTemplate. Usando Mock. Tranca: {}. Erro: {}", idTranca, e.getMessage());
     }
+
+    // 🟢 ATIVAÇÃO DO MOCK
+    logger.warn(">>> SIMULANDO TRANCAMENTO da tranca {} com sucesso (MOCK).", idTranca);
 }
 
 /**
@@ -72,9 +118,17 @@ public void alterarStatusBicicleta(Integer idBicicleta, String status) {
     try {
         String url = equipamentoUrl + "/bicicleta/" + idBicicleta + "/status/" + status;
         restTemplate.postForLocation(url, null);
-    } catch (Exception e) {
-        System.err.println("⚠️ [EQUIPAMENTO] Offline. Simulando mudança de status da bike " + idBicicleta);
+        logger.info("✅ [EQUIPAMENTO] Status da bike {} alterado para {} no serviço real.", idBicicleta, status);
+    } catch (ResourceAccessException e) {
+        logger.warn("⚠️ [EQUIPAMENTO] Conexão falhou. Usando Mock. Bike: {}. Causa: {}", idBicicleta, e.getMessage());
+    } catch (HttpClientErrorException | HttpServerErrorException e) {
+        logger.error("⚠️ [EQUIPAMENTO] Falha HTTP. Status: {}. Usando Mock. Bike: {}. Corpo da Resposta: {}",
+                e.getStatusCode(), idBicicleta, e.getResponseBodyAsString());
+    } catch (RestClientException e) {
+        logger.error("⚠️ [EQUIPAMENTO] Erro inesperado do RestTemplate. Usando Mock. Bike: {}. Erro: {}", idBicicleta, e.getMessage());
     }
+    // 🟢 ATIVAÇÃO DO MOCK
+    logger.warn(">>> SIMULANDO ALTERAÇÃO DE STATUS da bike {} com sucesso (MOCK).", idBicicleta);
 }
 
 /**
@@ -84,12 +138,23 @@ public BicicletaDTO getBicicleta(Integer idBicicleta) {
     try {
         String url = equipamentoUrl + "/bicicleta/" + idBicicleta;
         return restTemplate.getForObject(url, BicicletaDTO.class);
-    } catch (Exception e) {
-        System.err.println("⚠️ [EQUIPAMENTO] Offline. Retornando bike mock " + idBicicleta);
-        BicicletaDTO mock = new BicicletaDTO();
-        mock.setId(idBicicleta);
-        mock.setStatus("EM_USO"); // Assumindo que se buscou, está alugada
-        return mock;
+    } catch (ResourceAccessException e) {
+        logger.warn("⚠️ [EQUIPAMENTO] Conexão falhou. Usando Mock. Bike: {}. Causa: {}", idBicicleta, e.getMessage());
+    } catch (HttpClientErrorException | HttpServerErrorException e) {
+        logger.error("⚠️ [EQUIPAMENTO] Falha HTTP. Status: {}. Usando Mock. Bike: {}. Corpo da Resposta: {}",
+                e.getStatusCode(), idBicicleta, e.getResponseBodyAsString());
+    } catch (RestClientException e) {
+        logger.error("⚠️ [EQUIPAMENTO] Erro inesperado do RestTemplate. Usando Mock. Bike: {}. Erro: {}", idBicicleta, e.getMessage());
     }
+
+    // 🟢 FALLBACK (PLANO B): Retorna um dado fictício para não travar a demo
+    logger.warn(">>> SIMULANDO BUSCA DA BICICLETA {} com sucesso (MOCK).", idBicicleta);
+    BicicletaDTO mock = new BicicletaDTO();
+    mock.setId(idBicicleta);
+    mock.setNumero(123);
+    mock.setMarca("Caloi Mock");
+    mock.setModelo("Veloz");
+    mock.setStatus("EM_USO"); // Assumindo que se buscou, está alugada
+    return mock;
 }
 }
